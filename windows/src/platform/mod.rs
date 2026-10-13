@@ -22,6 +22,7 @@ pub mod icon;
 pub mod overlay;
 pub mod paste;
 pub mod prompt;
+pub mod settings;
 pub mod sound;
 pub mod tray;
 pub mod volume;

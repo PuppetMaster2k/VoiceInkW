@@ -11,7 +11,7 @@ cursor is. It runs from the notification area, like the macOS menu-bar app.
 |---|---|
 | Global shortcut: toggle, push-to-talk, hybrid, modifier-only keys (Right ⌘) | `WH_KEYBOARD_LL` / `WH_MOUSE_LL` hooks: `RightCtrl`, `F9`, `Ctrl+Shift+Space`, `Mouse4`, … |
 | CoreAudio recorder (16 kHz mono) | WASAPI shared-mode capture; any mix format is downmixed and resampled to 16 kHz |
-| Cloud transcription | Groq, OpenAI, Deepgram (Nova-3, keyterms), ElevenLabs Scribe, Mistral Voxtral, any OpenAI-compatible endpoint (e.g. a local `whisper.cpp` server) |
+| Cloud transcription | OpenAI (default, `gpt-4o-transcribe`), Groq, Deepgram (Nova-3, keyterms), ElevenLabs Scribe, Mistral Voxtral, any OpenAI-compatible endpoint (e.g. a local `whisper.cpp` server) |
 | Local whisper.cpp | Optional `local-whisper` build feature (`whisper-rs`) |
 | Output filter (`[MUSIC]`, `(laughs)`, tag blocks, filler words) | Ported 1:1 (`text::filter`) |
 | Paragraph formatter, word counter | Ported (`text::formatter`, `text::words`) |
@@ -25,18 +25,19 @@ cursor is. It runs from the notification area, like the macOS menu-bar app.
 | Start/stop sounds, mute system audio while recording | `PlaySoundW` using the original sounds; `IAudioEndpointVolume` |
 | Keychain | DPAPI-encrypted `keys.json` (current Windows user only) |
 | History | `history.jsonl`, CSV export, "Paste last transcription" shortcut |
+| Dashboard & Settings | Native window: stats (words, time saved, WPM, streak), a 14-day chart, top apps and recent transcriptions, plus settings pages for General, Transcription, AI Enhancement, Prompts (editor), Dictionary, Output and History |
 | Launch at login | `HKCU\…\Run` |
 
 Not ported (they depend on Apple frameworks or macOS-only infrastructure):
 Apple Speech, FluidAudio/Parakeet, the VoiceInk Refine XPC model, realtime
-streaming providers, screen OCR context, licensing/updates (Sparkle) and the
-SwiftUI dashboard. Settings are edited from the tray menu or in `config.json`.
+streaming providers, screen OCR context and licensing/updates (Sparkle).
+Modes are edited in `config.json`; everything else is in the Settings window.
 
 ## Install and run
 
 1. Download `voiceink.exe` from the **Windows (Rust)** GitHub Actions run, or build it yourself (see below).
 2. Run it. A blue microphone icon appears in the notification area.
-3. Right-click it, open **API keys**, and enter a key for your transcription provider (Groq is the default).
+3. Click it to open **Dashboard & Settings**, go to **Transcription**, paste your OpenAI key and click **Save**. OpenAI is the default for both transcription and AI enhancement, so one key covers both. Right-click the icon for the quick menu.
 4. Click into any text field and tap **Right Ctrl**, speak, then tap **Right Ctrl** again. You can also hold Right Ctrl while you talk.
    **Esc** cancels. **Alt+Shift+V** pastes the last transcription again.
 
@@ -73,7 +74,9 @@ The same executable has CLI subcommands. In release builds it re-attaches to the
 
 ```text
 voiceink                          start the tray app
-voiceink set-key groq gsk_...     store an API key (DPAPI-encrypted)
+voiceink dashboard                open the dashboard (starts the app if needed)
+voiceink settings                 open the settings
+voiceink set-key openai sk-...     store an API key (DPAPI-encrypted)
 voiceink keys                     list providers with stored keys
 voiceink transcribe memo.wav      run the full pipeline on a WAV file
 voiceink devices                  list microphones
@@ -82,7 +85,7 @@ voiceink export-history out.csv
 voiceink config-path
 ```
 
-API keys can also come from environment variables, either `VOICEINK_GROQ_API_KEY` or `GROQ_API_KEY`.
+API keys can also come from environment variables, either `VOICEINK_OPENAI_API_KEY` or `OPENAI_API_KEY`.
 
 ## Configuration
 
@@ -101,7 +104,7 @@ Example `config.json` excerpt:
 {
   "hotkeys": { "record": "RightCtrl", "mode": "hybrid", "hybrid_threshold_ms": 500,
                "cancel": "Escape", "paste_last": "Alt+Shift+V" },
-  "transcription": { "provider": "groq", "model": null, "language": "auto",
+  "transcription": { "provider": "openai", "model": null, "language": "auto",
                      "custom_endpoint": "http://127.0.0.1:8080/v1/audio/transcriptions" },
   "enhancement": { "enabled": true, "provider": "openai", "model": null,
                    "prompt_id": "00000000-0000-0000-0000-000000000001",
@@ -136,12 +139,14 @@ src/
 ├── transcription/ cloud clients (+ local whisper.cpp)
 ├── enhancement/   LLM chat clients, retries
 ├── pipeline.rs    transcribe → filter → trigger words → format → replace → enhance
+├── stats.rs       dashboard statistics
 └── platform/      Win32 via the `windows` crate (Windows only)
     ├── app.rs        tray app, message loop, recording state machine
     ├── capture.rs    WASAPI microphone capture
     ├── hotkey.rs     low-level keyboard/mouse hooks
     ├── paste.rs, clipboard.rs   SendInput and clipboard
     ├── overlay.rs    recorder pill
+    ├── settings.rs   Dashboard & Settings window
     ├── tray.rs, icon.rs, prompt.rs, sound.rs, volume.rs, autostart.rs, foreground.rs
 ```
 

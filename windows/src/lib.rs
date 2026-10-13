@@ -15,6 +15,7 @@ pub mod http;
 pub mod modes;
 pub mod pipeline;
 pub mod prompts;
+pub mod stats;
 pub mod text;
 pub mod transcription;
 

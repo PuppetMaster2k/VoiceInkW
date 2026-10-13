@@ -8,11 +8,13 @@ use super::capture::Recorder;
 use super::hotkey::{self, HotkeyEvent, WM_HOTKEY_EVENT};
 use super::icon::IconState;
 use super::overlay::{Overlay, View, WM_OVERLAY_CLICKED};
+use super::settings::{self, WM_SETTINGS_SAVED};
 use super::sound::{self, Cue};
 use super::tray::{Menu, NoticeKind, Tray, WM_TRAY};
 use super::{autostart, clipboard, foreground, paste, prompt, volume, wide};
 use crate::config::{
     self, Config, EnhancementProvider, HotkeyMode, OutputMode, PasteMethod, TranscriptionProvider,
+    LANGUAGES,
 };
 use crate::history::{self, Status};
 use crate::modes::{self, ForegroundInfo};
@@ -36,16 +38,19 @@ use windows::Win32::UI::HiDpi::{
 };
 use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClassNameW, GetMessageW,
-    GetWindowThreadProcessId, KillTimer, PostMessageW, PostQuitMessage, RegisterClassW,
-    RegisterWindowMessageW, SetTimer, TranslateMessage, EVENT_SYSTEM_FOREGROUND, MSG,
-    SW_SHOWNORMAL, WINEVENT_OUTOFCONTEXT, WM_APP, WM_CLOSE, WM_CONTEXTMENU, WM_DESTROY,
-    WM_LBUTTONUP, WM_RBUTTONUP, WM_TIMER, WNDCLASSW, WS_OVERLAPPED,
+    AllowSetForegroundWindow, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW,
+    FindWindowW, GetClassNameW, GetMessageW, GetWindowThreadProcessId, IsDialogMessageW, KillTimer,
+    PostMessageW, PostQuitMessage, RegisterClassW, RegisterWindowMessageW, SetTimer,
+    TranslateMessage, ASFW_ANY, EVENT_SYSTEM_FOREGROUND, MSG, SW_SHOWNORMAL, WINEVENT_OUTOFCONTEXT,
+    WM_APP, WM_CLOSE, WM_CONTEXTMENU, WM_DESTROY, WM_TIMER, WNDCLASSW, WS_OVERLAPPED,
 };
 
 const WM_PIPELINE_STAGE: u32 = WM_APP + 2;
 const WM_PIPELINE_DONE: u32 = WM_APP + 3;
 const WM_NOTICE: u32 = WM_APP + 7;
+/// Sent by `voiceink dashboard` / `voiceink settings` to the running instance; `wParam` = page.
+const WM_OPEN_SETTINGS: u32 = WM_APP + 9;
+const MAIN_CLASS: PCWSTR = w!("VoiceInkMainWindow");
 const MUTE_TIMER: usize = 10;
 const MUTE_DELAY_MS: u32 = 250;
 
@@ -71,26 +76,14 @@ const CMD_FORMATTING: usize = 607;
 const CMD_RESTORE_CLIPBOARD: usize = 608;
 const CMD_SOUNDS: usize = 609;
 const CMD_MUTE: usize = 610;
+const CMD_DASHBOARD: usize = 611;
+const CMD_SETTINGS: usize = 612;
 
-const LANGUAGES: &[(&str, &str)] = &[
-    ("auto", "Auto-detect"),
-    ("en", "English"),
-    ("de", "German"),
-    ("fr", "French"),
-    ("es", "Spanish"),
-    ("it", "Italian"),
-    ("pt", "Portuguese"),
-    ("nl", "Dutch"),
-    ("pl", "Polish"),
-    ("ru", "Russian"),
-    ("uk", "Ukrainian"),
-    ("tr", "Turkish"),
-    ("ja", "Japanese"),
-    ("zh", "Chinese"),
-    ("ko", "Korean"),
-    ("hi", "Hindi"),
-    ("ar", "Arabic"),
-];
+/// Work that must run after the app borrow is released (it pumps messages).
+enum Followup {
+    AskKey(&'static str),
+    OpenSettings(usize),
+}
 
 /// Results handed from worker threads to the UI thread.
 static RESULTS: Mutex<Vec<(u64, PipelineOutput)>> = Mutex::new(Vec::new());
@@ -234,7 +227,7 @@ impl App {
     }
 
     /// Picks up hand edits to `config.json`.
-    fn reload_if_changed(&mut self, force: bool) {
+    fn reload_if_changed(&mut self, force: bool, announce: bool) {
         let mtime = config_mtime();
         if !force && mtime == self.config_mtime {
             return;
@@ -244,7 +237,7 @@ impl App {
                 self.config = cfg;
                 self.config_mtime = mtime;
                 self.apply_config();
-                if force {
+                if announce {
                     self.notify("Settings reloaded", "", NoticeKind::Info);
                 }
             }
@@ -255,7 +248,7 @@ impl App {
     // -- recording ----------------------------------------------------------
 
     fn start_recording(&mut self, by_press: bool) {
-        self.reload_if_changed(false);
+        self.reload_if_changed(false, false);
 
         let (mut target, mut fg) = foreground::current();
         if is_own_or_shell(target) && !self.last_external.is_invalid() {
@@ -457,6 +450,7 @@ impl App {
             output.delivery = None;
         }
         self.save_history(&output);
+        settings::refresh();
 
         if current {
             let State::Processing(job) = std::mem::replace(&mut self.state, State::Idle) else {
@@ -600,6 +594,9 @@ impl App {
         menu.disabled(&format!("VoiceInk {APP_VERSION}"));
         menu.disabled(&format!("Shortcut: {}", hotkey::describe(&cfg.hotkeys)));
         menu.separator();
+        menu.item(CMD_DASHBOARD, "Dashboard…");
+        menu.item(CMD_SETTINGS, "Settings…");
+        menu.separator();
         let toggle = match self.state {
             State::Idle => "Start recording",
             State::Recording(_) => "Stop recording",
@@ -737,7 +734,7 @@ impl App {
 
     /// Handles a menu command. Returns the API key name to ask for, if any; the
     /// dialog must run after the app borrow is released (it pumps messages).
-    fn on_command(&mut self, cmd: usize) -> Option<&'static str> {
+    fn on_command(&mut self, cmd: usize) -> Option<Followup> {
         let mut ask = None;
         let in_range =
             |base: usize, len: usize| (base..base + len).contains(&cmd).then(|| cmd - base);
@@ -750,7 +747,7 @@ impl App {
             }
             self.save_config();
             if p.requires_api_key() && !credentials::has(p.key_name()) {
-                ask = Some(p.key_name());
+                ask = Some(Followup::AskKey(p.key_name()));
             }
         } else if let Some(i) = in_range(CMD_PROMPT_BASE, self.config.prompts.len().min(90)) {
             self.config.enhancement.prompt_id = self.config.prompts[i].id.clone();
@@ -763,7 +760,7 @@ impl App {
             }
             self.save_config();
             if p.requires_api_key() && !credentials::has(p.key_name()) {
-                ask = Some(p.key_name());
+                ask = Some(Followup::AskKey(p.key_name()));
             }
         } else if let Some(i) = in_range(CMD_LANGUAGE_BASE, LANGUAGES.len()) {
             self.config.transcription.language = LANGUAGES[i].0.into();
@@ -784,7 +781,7 @@ impl App {
             ][i];
             self.save_config();
         } else if let Some(i) = in_range(CMD_KEY_BASE, api_key_names().len()) {
-            ask = Some(api_key_names()[i]);
+            ask = Some(Followup::AskKey(api_key_names()[i]));
         } else {
             match cmd {
                 CMD_TOGGLE => match self.state {
@@ -798,7 +795,7 @@ impl App {
                     self.save_config();
                     let p = self.config.enhancement.provider;
                     if self.config.enhancement.enabled && p.requires_api_key() && !credentials::has(p.key_name()) {
-                        ask = Some(p.key_name());
+                        ask = Some(Followup::AskKey(p.key_name()));
                     }
                 }
                 CMD_FORMATTING => {
@@ -828,7 +825,7 @@ impl App {
                     }
                 }
                 CMD_OPEN_SETTINGS => open_path(&config::config_path()),
-                CMD_RELOAD => self.reload_if_changed(true),
+                CMD_RELOAD => self.reload_if_changed(true, true),
                 CMD_OPEN_FOLDER => open_path(&config::data_dir()),
                 CMD_OPEN_HISTORY => {
                     let out = config::data_dir().join("history.csv");
@@ -843,6 +840,8 @@ impl App {
                     "Voice to text in any app. Press your shortcut, speak, and the text is pasted where your cursor is.",
                     NoticeKind::Info,
                 ),
+                CMD_DASHBOARD => ask = Some(Followup::OpenSettings(0)),
+                CMD_SETTINGS => ask = Some(Followup::OpenSettings(1)),
                 CMD_QUIT => unsafe {
                     let _ = DestroyWindow(self.hwnd);
                 },
@@ -862,6 +861,12 @@ impl App {
             Err(e) => self.notify("Could not save API key", &e, NoticeKind::Error),
         }
         self.refresh_tray();
+    }
+}
+
+fn open_settings(hwnd: HWND, page: usize) {
+    if let Err(e) = settings::open(hwnd, page) {
+        with_app(|app| app.notify("Could not open settings", &e, NoticeKind::Error));
     }
 }
 
@@ -981,7 +986,19 @@ unsafe extern "system" fn wnd_proc(
             LRESULT(0)
         }
         WM_PIPELINE_DONE => {
-            with_app(|app| app.on_done(wparam.0 as u64));
+            // If the app is busy in a nested loop (menu, dialog), try again shortly.
+            if with_app(|app| app.on_done(wparam.0 as u64)).is_none() {
+                std::thread::sleep(Duration::from_millis(20));
+                let _ = PostMessageW(Some(hwnd), WM_PIPELINE_DONE, wparam, lparam);
+            }
+            LRESULT(0)
+        }
+        WM_OPEN_SETTINGS => {
+            open_settings(hwnd, wparam.0);
+            LRESULT(0)
+        }
+        WM_SETTINGS_SAVED => {
+            with_app(|app| app.reload_if_changed(true, false));
             LRESULT(0)
         }
         WM_OVERLAY_CLICKED => {
@@ -1004,18 +1021,19 @@ unsafe extern "system" fn wnd_proc(
         }
         WM_TRAY => {
             let event = (lparam.0 & 0xFFFF) as u32;
-            if event == WM_CONTEXTMENU
-                || event == WM_RBUTTONUP
-                || event == WM_LBUTTONUP
-                || event == 0x400
-            {
+            // NOTIFYICON_VERSION_4: NIN_SELECT / NIN_KEYSELECT on left click or Enter.
+            if event == 0x400 || event == 0x401 {
+                open_settings(hwnd, 0);
+            } else if event == WM_CONTEXTMENU {
                 // Build the menu inside a short borrow, then track it without holding the app.
                 if let Some(menu) = with_app(|app| app.build_menu()) {
                     let cmd = menu.track(hwnd);
                     drop(menu);
                     if cmd != 0 {
-                        if let Some(Some(name)) = with_app(|app| app.on_command(cmd)) {
-                            ask_and_store_key(hwnd, name);
+                        match with_app(|app| app.on_command(cmd)).flatten() {
+                            Some(Followup::AskKey(name)) => ask_and_store_key(hwnd, name),
+                            Some(Followup::OpenSettings(page)) => open_settings(hwnd, page),
+                            None => {}
                         }
                     }
                 }
@@ -1060,12 +1078,30 @@ unsafe extern "system" fn wnd_proc(
     }
 }
 
-pub fn run() -> Result<(), String> {
+/// Asks an already running instance to show its dashboard. Returns false if none runs.
+pub fn open_settings_in_running_instance(page: usize) -> bool {
+    unsafe {
+        match FindWindowW(MAIN_CLASS, None) {
+            Ok(hwnd) if !hwnd.is_invalid() => {
+                // Let the running instance take the foreground.
+                let _ = AllowSetForegroundWindow(ASFW_ANY);
+                PostMessageW(Some(hwnd), WM_OPEN_SETTINGS, WPARAM(page), LPARAM(0)).is_ok()
+            }
+            _ => false,
+        }
+    }
+}
+
+/// Runs the tray app; `open_page` shows the dashboard/settings right away.
+pub fn run(open_page: Option<usize>) -> Result<(), String> {
     unsafe {
         // Single instance per user session.
         let _mutex = CreateMutexW(None, true, w!("Local\\VoiceInkWindowsSingleInstance"))
             .map_err(|e| e.to_string())?;
         if GetLastError() == ERROR_ALREADY_EXISTS {
+            if open_settings_in_running_instance(open_page.unwrap_or(0)) {
+                return Ok(());
+            }
             return Err(
                 "VoiceInk is already running — look for its icon in the notification area.".into(),
             );
@@ -1078,7 +1114,7 @@ pub fn run() -> Result<(), String> {
         let config = Config::load(&config::config_path())?;
 
         let instance = GetModuleHandleW(None).map_err(|e| e.to_string())?;
-        let class = w!("VoiceInkMainWindow");
+        let class = MAIN_CLASS;
         let wc = WNDCLASSW {
             lpfnWndProc: Some(wnd_proc),
             hInstance: instance.into(),
@@ -1142,7 +1178,7 @@ pub fn run() -> Result<(), String> {
                 app.notify(
                     "Almost ready",
                     &format!(
-                        "Add your {} API key: right-click the VoiceInk tray icon › API keys.",
+                        "Add your {} API key: click the VoiceInk tray icon › Transcription.",
                         provider.display_name()
                     ),
                     NoticeKind::Warning,
@@ -1159,9 +1195,18 @@ pub fn run() -> Result<(), String> {
             }
         });
         log::info!("ready; settings at {}", config::config_path().display());
+        if let Some(page) = open_page {
+            open_settings(hwnd, page);
+        }
 
         let mut msg = MSG::default();
         while GetMessageW(&mut msg, None, 0, 0).as_bool() {
+            // Tab / Enter / Esc navigation inside the settings window.
+            if let Some(dialog) = settings::hwnd() {
+                if IsDialogMessageW(dialog, &msg).as_bool() {
+                    continue;
+                }
+            }
             let _ = TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }

@@ -105,6 +105,35 @@ fn replace_bounded(text: &str, re: &Regex, replacement: &str) -> String {
     out
 }
 
+/// Parses `spoken -> written` lines (also accepts `=>` and `→`).
+pub fn parse_replacement_lines(text: &str) -> Result<Vec<WordReplacement>, String> {
+    let mut out = Vec::new();
+    for (n, line) in text.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let split = ["->", "=>", "→"]
+            .iter()
+            .find_map(|sep| line.split_once(sep));
+        let Some((original, replacement)) = split else {
+            return Err(format!(
+                "Replacement line {} needs \"spoken -> written\": {line}",
+                n + 1
+            ));
+        };
+        let (original, replacement) = (original.trim(), replacement.trim());
+        if original.is_empty() {
+            return Err(format!("Replacement line {} has nothing before ->", n + 1));
+        }
+        out.push(WordReplacement {
+            original: original.into(),
+            replacement: replacement.into(),
+        });
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -144,6 +173,20 @@ mod tests {
     fn cjk_uses_substring_matching() {
         let rules = [rule("東京", "Tokyo")];
         assert_eq!(apply_replacements("私は東京に", &rules), "私はTokyoに");
+    }
+
+    #[test]
+    fn parses_replacement_lines() {
+        let r = parse_replacement_lines(
+            "voice ink, voice inc -> VoiceInk\n\n# comment\nk8s => Kubernetes\nai → AI",
+        )
+        .unwrap();
+        assert_eq!(r.len(), 3);
+        assert_eq!(r[0].original, "voice ink, voice inc");
+        assert_eq!(r[0].replacement, "VoiceInk");
+        assert_eq!(r[2].replacement, "AI");
+        assert!(parse_replacement_lines("no arrow here").is_err());
+        assert!(parse_replacement_lines(" -> x").is_err());
     }
 
     #[test]

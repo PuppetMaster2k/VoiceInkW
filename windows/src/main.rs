@@ -11,6 +11,8 @@ VoiceInk for Windows — voice to text in any app
 
 USAGE:
     voiceink                          Start the tray app (default)
+    voiceink dashboard                Open the dashboard (starts the app if needed)
+    voiceink settings                 Open the settings
     voiceink set-key <provider> <key> Store an API key (encrypted with DPAPI)
     voiceink remove-key <provider>    Delete a stored API key
     voiceink keys                     List providers that have a key
@@ -22,7 +24,7 @@ USAGE:
     voiceink --version
 
 PROVIDERS:
-    transcription: groq, openai, deepgram, elevenlabs, mistral, custom-transcription
+    transcription: openai, groq, deepgram, elevenlabs, mistral, custom-transcription
     enhancement:   openai, anthropic, gemini, groq, cerebras, mistral, openrouter, custom-enhancement
 ";
 
@@ -159,6 +161,22 @@ fn cli(args: &[String]) -> Result<(), String> {
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
 
+    #[cfg(windows)]
+    if let Some(page) = match args.first().map(String::as_str) {
+        Some("dashboard") => Some(0),
+        Some("settings") => Some(1),
+        _ => None,
+    } {
+        if !voiceink::platform::app::open_settings_in_running_instance(page) {
+            init_logging();
+            if let Err(e) = voiceink::platform::app::run(Some(page)) {
+                voiceink::platform::show_error(&e);
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
     if !args.is_empty() {
         #[cfg(windows)]
         voiceink::platform::attach_parent_console();
@@ -174,7 +192,7 @@ fn main() {
 
     #[cfg(windows)]
     {
-        if let Err(e) = voiceink::platform::app::run() {
+        if let Err(e) = voiceink::platform::app::run(None) {
             log::error!("fatal: {e}");
             voiceink::platform::show_error(&e);
             std::process::exit(1);

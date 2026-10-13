@@ -33,8 +33,8 @@ pub enum TranscriptionProvider {
 
 impl TranscriptionProvider {
     pub const ALL: [TranscriptionProvider; 7] = [
-        Self::Groq,
         Self::OpenAI,
+        Self::Groq,
         Self::Deepgram,
         Self::ElevenLabs,
         Self::Mistral,
@@ -227,6 +227,27 @@ impl EnhancementProvider {
     }
 }
 
+/// Languages offered in the menu and dashboard (`auto` = provider auto-detect).
+pub const LANGUAGES: &[(&str, &str)] = &[
+    ("auto", "Auto-detect"),
+    ("en", "English"),
+    ("de", "German"),
+    ("fr", "French"),
+    ("es", "Spanish"),
+    ("it", "Italian"),
+    ("pt", "Portuguese"),
+    ("nl", "Dutch"),
+    ("pl", "Polish"),
+    ("ru", "Russian"),
+    ("uk", "Ukrainian"),
+    ("tr", "Turkish"),
+    ("ja", "Japanese"),
+    ("zh", "Chinese"),
+    ("ko", "Korean"),
+    ("hi", "Hindi"),
+    ("ar", "Arabic"),
+];
+
 // ---------------------------------------------------------------------------
 // Settings sections
 // ---------------------------------------------------------------------------
@@ -291,7 +312,7 @@ pub struct TranscriptionSettings {
 impl Default for TranscriptionSettings {
     fn default() -> Self {
         Self {
-            provider: TranscriptionProvider::Groq,
+            provider: TranscriptionProvider::OpenAI,
             model: None,
             language: "auto".into(),
             custom_endpoint: "http://127.0.0.1:8080/v1/audio/transcriptions".into(),
@@ -866,6 +887,19 @@ mod tests {
         assert!(cfg.enhancement.enabled);
         assert_eq!(cfg.prompts.len(), 5);
         assert_eq!(cfg.hotkeys.record, "RightCtrl");
+    }
+
+    #[test]
+    fn openai_is_the_default_everywhere() {
+        let cfg = Config::default();
+        assert_eq!(cfg.transcription.provider, TranscriptionProvider::OpenAI);
+        assert_eq!(cfg.transcription.model_name(), "gpt-4o-transcribe");
+        assert_eq!(cfg.enhancement.provider, EnhancementProvider::OpenAI);
+        // One OpenAI key covers both transcription and enhancement.
+        assert_eq!(
+            TranscriptionProvider::OpenAI.key_name(),
+            EnhancementProvider::OpenAI.key_name()
+        );
     }
 
     #[test]

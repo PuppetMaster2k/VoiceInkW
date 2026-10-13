@@ -30,21 +30,30 @@ const WAVE_FORMAT_EXTENSIBLE: u16 = 0xFFFE;
 const SUBTYPE_PCM: GUID = GUID::from_u128(0x00000001_0000_0010_8000_00aa00389b71);
 const SUBTYPE_IEEE_FLOAT: GUID = GUID::from_u128(0x00000003_0000_0010_8000_00aa00389b71);
 
-/// Balances `CoInitializeEx` on the capture thread.
-struct ComGuard;
+/// Balances `CoInitializeEx`. A thread that already uses another apartment
+/// model (the STA UI thread) keeps it and needs no uninitialization.
+struct ComGuard {
+    owned: bool,
+}
 
 impl ComGuard {
     fn new() -> Result<Self, String> {
-        unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
-            .ok()
+        const RPC_E_CHANGED_MODE: i32 = 0x8001_0106_u32 as i32;
+        let hr = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+        if hr.0 == RPC_E_CHANGED_MODE {
+            return Ok(ComGuard { owned: false });
+        }
+        hr.ok()
             .map_err(|e| format!("COM initialization failed: {e}"))?;
-        Ok(ComGuard)
+        Ok(ComGuard { owned: true })
     }
 }
 
 impl Drop for ComGuard {
     fn drop(&mut self) {
-        unsafe { CoUninitialize() };
+        if self.owned {
+            unsafe { CoUninitialize() };
+        }
     }
 }
 
