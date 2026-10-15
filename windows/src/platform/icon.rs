@@ -49,14 +49,14 @@ fn mic_coverage(x: f32, y: f32) -> f32 {
 pub fn render(size: usize, state: IconState) -> Vec<u8> {
     let (red, green, blue) = state.color();
     let mut pixels = vec![0u8; size * size * 4];
-    for (index, pixel) in pixels.chunks_exact_mut(4).enumerate() {
+    for (index, pixel) in pixels.as_chunks_mut::<4>().0.iter_mut().enumerate() {
         let x = ((index % size) as f32 + 0.5) / size as f32;
         let y = ((index / size) as f32 + 0.5) / size as f32;
         let alpha = (0.5 - ((x - 0.5).hypot(y - 0.5) - 0.48) * size as f32).clamp(0.0, 1.0);
         let glyph = mic_coverage(x, y);
         // White glyph over the coloured disc, premultiplied by the disc's alpha.
         let shade = |channel: u8| ((f32::from(channel) * (1.0 - glyph) + 255.0 * glyph) * alpha) as u8;
-        pixel.copy_from_slice(&[shade(blue), shade(green), shade(red), (alpha * 255.0) as u8]);
+        *pixel = [shade(blue), shade(green), shade(red), (alpha * 255.0) as u8];
     }
     pixels
 }

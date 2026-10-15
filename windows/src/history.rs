@@ -274,7 +274,7 @@ mod tests {
         assert_eq!(String::from_utf8(csv).unwrap().lines().count(), 4);
 
         store.clear().unwrap();
-        assert!(store.load().is_empty());
+        assert_eq!(store.load(), vec![]);
         store.clear().unwrap();
         std::fs::remove_dir_all(dir).ok();
     }

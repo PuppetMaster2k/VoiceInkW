@@ -179,7 +179,7 @@ fn exact_snippet_skips_enhancement() {
     let fake = Fake::new("Today.").with_chat(Ok("unused"));
     let (out, stages) = run(&cfg, &fake, &input());
     assert_eq!(stages, [Stage::Transcribing]);
-    assert!(fake.requests().is_empty());
+    assert_eq!(fake.requests(), vec![]);
     assert_eq!(out.delivery.unwrap().text, "Date: 2026-10-15");
     assert_eq!(out.entry.final_text(), "Date: 2026-10-15");
 }

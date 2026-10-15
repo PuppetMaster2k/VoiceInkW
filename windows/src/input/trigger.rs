@@ -292,7 +292,7 @@ mod tests {
         assert!(!sw);
         assert_eq!(ev, [HotkeyEvent::Down(TriggerKind::Dictation)]);
         // Auto-repeat while held produces nothing.
-        assert!(press(&mut s, vk::RCONTROL, true, NONE, false).1.is_empty());
+        assert_eq!(press(&mut s, vk::RCONTROL, true, NONE, false).1, vec![]);
         assert_eq!(press(&mut s, vk::RCONTROL, false, NONE, false).1, [HotkeyEvent::Up(TriggerKind::Dictation)]);
     }
 
@@ -308,12 +308,12 @@ mod tests {
     #[test]
     fn toggle_mode_fires_on_clean_release_only() {
         let mut s = set(HotkeyMode::Toggle);
-        assert!(press(&mut s, vk::RCONTROL, true, NONE, false).1.is_empty());
+        assert_eq!(press(&mut s, vk::RCONTROL, true, NONE, false).1, vec![]);
         assert_eq!(press(&mut s, vk::RCONTROL, false, NONE, false).1, [HotkeyEvent::Down(TriggerKind::Dictation)]);
 
         press(&mut s, vk::RCONTROL, true, NONE, false);
         press(&mut s, u16::from(b'C'), true, Modifiers { ctrl: true, ..NONE }, false);
-        assert!(press(&mut s, vk::RCONTROL, false, NONE, false).1.is_empty());
+        assert_eq!(press(&mut s, vk::RCONTROL, false, NONE, false).1, vec![]);
     }
 
     #[test]
@@ -327,7 +327,7 @@ mod tests {
 
         let (sw, ev) = press(&mut s, vk::SPACE, true, Modifiers { ctrl: true, ..NONE }, false);
         assert!(!sw);
-        assert!(ev.is_empty());
+        assert_eq!(ev, vec![]);
     }
 
     #[test]
