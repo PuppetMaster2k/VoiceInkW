@@ -134,6 +134,40 @@ public class CoreTests
         Assert.Equal(3, stats.DailyWords[^1].Words);
     }
 
+    [Fact]
+    public void Model_archives_extract_without_top_folder_and_reject_path_traversal()
+    {
+        var work = Path.Combine(Path.GetTempPath(), "voiceink-arc-" + Guid.NewGuid());
+        Directory.CreateDirectory(work);
+        try
+        {
+            string Pack(string name, string entry)
+            {
+                var path = Path.Combine(work, name);
+                using (var stream = File.Create(path))
+                using (var writer = SharpCompress.Writers.WriterFactory.OpenWriter(
+                           stream, SharpCompress.Common.ArchiveType.Tar, new SharpCompress.Writers.WriterOptions(SharpCompress.Common.CompressionType.BZip2)))
+                {
+                    writer.Write(entry, new MemoryStream("data"u8.ToArray()), null);
+                }
+
+                return path;
+            }
+
+            var target = Path.Combine(work, "model");
+            Transcription.Local.Archives.ExtractTarBz2(Pack("ok.tar.bz2", "model-x/tokens.txt"), target);
+            Assert.Equal("data", File.ReadAllText(Path.Combine(target, "tokens.txt")));
+
+            Assert.Throws<InvalidDataException>(() =>
+                Transcription.Local.Archives.ExtractTarBz2(Pack("bad.tar.bz2", "x/../../evil.txt"), Path.Combine(work, "bad")));
+            Assert.False(File.Exists(Path.Combine(work, "evil.txt")));
+        }
+        finally
+        {
+            Directory.Delete(work, true);
+        }
+    }
+
     private sealed class TempHome : IDisposable
     {
         private readonly string _dir = Path.Combine(Path.GetTempPath(), "voiceink-test-" + Guid.NewGuid());
