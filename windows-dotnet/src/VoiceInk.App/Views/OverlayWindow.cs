@@ -58,12 +58,14 @@ internal sealed class OverlayWindow : Window
         Content = root;
         SystemBackdrop = new DesktopAcrylicBackdrop();
 
-        var presenter = (OverlappedPresenter)AppWindow.Presenter;
+        // Create the presenter instead of casting AppWindow.Presenter: that WinRT runtime-class cast fails under NativeAOT.
+        var presenter = OverlappedPresenter.Create();
         presenter.IsAlwaysOnTop = true;
         presenter.IsResizable = false;
         presenter.IsMaximizable = false;
         presenter.IsMinimizable = false;
         presenter.SetBorderAndTitleBar(false, false);
+        AppWindow.SetPresenter(presenter);
         AppWindow.IsShownInSwitchers = false;
         WindowInterop.MakeNonActivatingOverlay(_hwnd);
 
