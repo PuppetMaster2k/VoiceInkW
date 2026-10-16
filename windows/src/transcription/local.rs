@@ -13,6 +13,13 @@ use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextPar
 static CONTEXT: Mutex<Option<(PathBuf, WhisperContext)>> = Mutex::new(None);
 const MAX_THREADS: usize = 8;
 
+/// Frees the loaded model (before deleting its file).
+pub fn unload() {
+    if let Ok(mut guard) = CONTEXT.lock() {
+        *guard = None;
+    }
+}
+
 pub struct LocalWhisper {
     model_path: PathBuf,
 }

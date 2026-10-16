@@ -13,7 +13,7 @@ cursor is. It runs from the notification area, like the macOS menu-bar app.
 | Global shortcut: toggle, push-to-talk, hybrid, modifier-only keys (Right ⌘) | `WH_KEYBOARD_LL` / `WH_MOUSE_LL` hooks: `RightCtrl`, `F9`, `Ctrl+Shift+Space`, `Mouse4`, … |
 | CoreAudio recorder (16 kHz mono) | WASAPI shared-mode capture; any mix format is downmixed and resampled to 16 kHz |
 | Cloud transcription | OpenAI (default, `gpt-4o-transcribe`), Groq, Deepgram (Nova-3, keyterms), ElevenLabs Scribe, Mistral Voxtral, any OpenAI-compatible endpoint (e.g. a local `whisper.cpp` server) |
-| Local whisper.cpp | Optional `local-whisper` build feature (`whisper-rs`) |
+| Local whisper.cpp | Optional `local-whisper` build feature (`whisper-rs`), with an in-app model downloader (**Local Models** page: parallel ranged downloads with speed display) |
 | Output filter (`[MUSIC]`, `(laughs)`, tag blocks, filler words) | Ported 1:1 (`text::filter`) |
 | Paragraph formatter, word counter | Ported (`text::formatter`, `text::words`) |
 | Dictionary: word replacements, custom vocabulary | Ported with the same boundary rules, including CJK/Thai |
@@ -73,10 +73,11 @@ Offline transcription with whisper.cpp needs CMake and a C++ compiler:
 cargo build --release --features local-whisper
 ```
 
-Download a model, e.g. `ggml-base.en.bin` from
-<https://huggingface.co/ggerganov/whisper.cpp>, into `%APPDATA%\VoiceInk\models`.
-Then select **Local (whisper.cpp)** in the tray menu and set
-`transcription.model` to the file name.
+Open **Local Models** in the settings window to download a model (Whisper
+`ggml-*.bin` files from <https://huggingface.co/ggerganov/whisper.cpp>) into
+`%APPDATA%\VoiceInk\models`, then click **Use** and **Save**. Models dropped
+into that folder by hand show up under **Transcription › Model** as well.
+Archives are unpacked with the `tar.exe` that ships with Windows 10 and later.
 
 Cross-compiling from Linux works with MinGW
 (`rustup target add x86_64-pc-windows-gnu`, `apt install gcc-mingw-w64-x86-64`,
@@ -177,6 +178,8 @@ src/
 ├── input/                hotkey parsing, press/release state machine, RecordingPolicy
 ├── pipeline/             transcribe → filter → format → replace → snippets → enhance; Command Mode
 ├── transcription/        Transcriber trait + OpenAI-compatible, Deepgram, ElevenLabs, local whisper.cpp
+├── local_models.rs       catalog of downloadable offline models, install/delete bookkeeping
+├── download.rs           parallel ranged file download, .tar.bz2 unpacking
 ├── enhancement/          ChatModel trait + OpenAI-compatible, Anthropic; rate limiting and retries
 ├── credentials.rs        SecretStore trait; DPAPI key file, env-var override, in-memory store
 ├── history.rs            HistoryStore (JSON Lines), CSV export

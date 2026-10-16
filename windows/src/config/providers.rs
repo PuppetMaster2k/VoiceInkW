@@ -32,7 +32,7 @@ impl TranscriptionProvider {
             Self::ElevenLabs => "ElevenLabs",
             Self::Mistral => "Mistral",
             Self::Custom => "Custom (OpenAI-compatible)",
-            Self::Local => "Local (whisper.cpp)",
+            Self::Local => "Local (offline)",
         }
     }
 

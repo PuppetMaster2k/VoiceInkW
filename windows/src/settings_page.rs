@@ -6,6 +6,7 @@ pub enum SettingsPage {
     Dashboard,
     General,
     Transcription,
+    LocalModels,
     Enhancement,
     Prompts,
     Dictionary,
@@ -17,10 +18,11 @@ pub enum SettingsPage {
 
 impl SettingsPage {
     /// Navigation order.
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::Dashboard,
         Self::General,
         Self::Transcription,
+        Self::LocalModels,
         Self::Enhancement,
         Self::Prompts,
         Self::Dictionary,
@@ -35,6 +37,7 @@ impl SettingsPage {
             Self::Dashboard => "Dashboard",
             Self::General => "General",
             Self::Transcription => "Transcription",
+            Self::LocalModels => "Local Models",
             Self::Enhancement => "AI Enhancement",
             Self::Prompts => "Prompts",
             Self::Dictionary => "Dictionary",

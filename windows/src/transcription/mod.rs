@@ -18,7 +18,8 @@ pub use openai_compatible::OpenAiCompatible;
 use crate::config::{TranscriptionProvider, TranscriptionSettings};
 use crate::credentials::SecretStore;
 use crate::http::HttpError;
-use std::path::Path;
+use crate::local_models::{self, LocalEngine};
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 const MIN_TIMEOUT: Duration = Duration::from_secs(10);
@@ -104,25 +105,41 @@ pub fn create(
     })
 }
 
-#[cfg(feature = "local-whisper")]
+/// Picks the offline engine that runs `model`: whisper.cpp for ggml files.
+/// Moonshine, Canary and Qwen3-ASR need the sherpa-onnx engine, which this
+/// build does not include yet.
 fn local_engine(
     settings: &TranscriptionSettings,
     models_dir: &Path,
     model: &str,
 ) -> Result<Box<dyn Transcriber>, TranscriptionError> {
     let dir = settings.local_models_dir.as_deref().unwrap_or(models_dir);
-    Ok(Box::new(local::LocalWhisper::new(dir.join(model))))
+    match local_models::engine_of(model) {
+        LocalEngine::Whisper => whisper_engine(dir.join(model)),
+        engine => Err(TranscriptionError::NotConfigured(format!(
+            "this build cannot run {} models yet; pick a Whisper model",
+            engine.group_title()
+        ))),
+    }
+}
+
+#[cfg(feature = "local-whisper")]
+#[allow(clippy::unnecessary_wraps)]
+fn whisper_engine(path: PathBuf) -> Result<Box<dyn Transcriber>, TranscriptionError> {
+    Ok(Box::new(local::LocalWhisper::new(path)))
 }
 
 #[cfg(not(feature = "local-whisper"))]
-fn local_engine(
-    _settings: &TranscriptionSettings,
-    _models_dir: &Path,
-    _model: &str,
-) -> Result<Box<dyn Transcriber>, TranscriptionError> {
+fn whisper_engine(_path: PathBuf) -> Result<Box<dyn Transcriber>, TranscriptionError> {
     Err(TranscriptionError::NotConfigured(
-        "this build has no local engine; rebuild with `--features local-whisper` or use the custom provider with a local whisper.cpp server".into(),
+        "this build has no Whisper engine; rebuild with `--features local-whisper` or use the custom provider with a local whisper.cpp server".into(),
     ))
+}
+
+/// Frees every loaded offline model (before deleting its files).
+pub fn unload_local() {
+    #[cfg(feature = "local-whisper")]
+    local::unload();
 }
 
 /// Trims the transcript and rejects empty results.
