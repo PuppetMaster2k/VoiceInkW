@@ -77,9 +77,13 @@ On Windows, install the .NET 10 SDK and Visual Studio 2022 Desktop development w
 ./scripts/package-nativeaot.ps1
 ```
 
-### Versioning
+### Versioning and releases (GitHub Actions)
 
-`<Version>` in `src/VoiceInk.App/VoiceInk.App.csproj` is the plain release version (`MAJOR.MINOR.PATCH`). On every feature or fix branch run `./scripts/bump-version.ps1 -Kind feature|fix|breaking` once; it bumps relative to `origin/main`, so repeating it is safe. Packages built on `main` use the version as is (`v0.2.0`, `VoiceInk-x64-0.2.0.zip`); packages built on any other branch get an `-rc` suffix (`v0.2.0-rc`, `VoiceInk-x64-0.2.0-rc.zip`).
+Versioning and releasing run entirely in `.github/workflows/windows-dotnet.yml`; nothing has to be run locally.
+
+- **Pull request:** the workflow bumps `<Version>` in `src/VoiceInk.App/VoiceInk.App.csproj` (plain `MAJOR.MINOR.PATCH`) and commits it to the PR branch. The kind comes from the PR label `feature` / `fix` / `breaking`, otherwise from the branch prefix (`feature/`, `feat/`, `fix/`, `bugfix/`, `breaking/`). `fix` → patch, `feature` → minor, `breaking` → major; a feature that would reach minor 20 rolls over to the next major (`0.19.3` → `1.0.0`, see `$script:MinorRollover` in `scripts/Version.ps1`). The label `no-release` skips the bump and the release. It then runs the tests and builds an `-rc` package (e.g. `v0.2.0-rc/VoiceInk-x64-0.2.0-rc.zip`) as a workflow artifact.
+- **Merge to main:** the workflow builds the package without `-rc`, creates the tag `vX.Y.Z` and a GitHub release with the zip and its SHA-256 file. If the tag already exists, nothing is published.
+- The scripts in `scripts/` (`bump-version.ps1`, `package-nativeaot.ps1`) are what the workflow runs; they can also be used locally, where builds off `main` get the `-rc` suffix.
 
 The script publishes with `Properties/PublishProfiles/NativeAOT.pubxml`, creates a ZIP in `artifacts/`, copies it to `../release/windows/` (creating the folder if needed), and prints its SHA-256 hash. Extract the entire archive and run `VoiceInk.exe`; keep the Windows App SDK and Whisper native libraries alongside the executable. AOT uses a separate `bin/aot` app build directory. The regular publish command remains available.
 

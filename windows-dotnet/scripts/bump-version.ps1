@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
 Bumps the semantic version in VoiceInk.App.csproj for the current feature/fix branch.
-  -Kind feature  -> MINOR + 1 (PATCH reset)
+  -Kind feature  -> MINOR + 1 (PATCH reset); reaching MINOR 20 rolls over to MAJOR + 1, MINOR 0
   -Kind fix      -> PATCH + 1
   -Kind breaking -> MAJOR + 1
 The new version is computed from main's version, so running it again on the same branch never bumps twice
@@ -27,7 +27,10 @@ if ($LASTEXITCODE -ne 0) { $base = 'main'; $mainXml = git -C $PSScriptRoot show 
 $main = Get-ProjectVersion ($mainXml -join "`n")
 
 $target = switch ($Kind) {
-    'feature'  { [version]::new($main.Major, $main.Minor + 1, 0) }
+    'feature'  {
+        if ($main.Minor + 1 -ge $script:MinorRollover) { [version]::new($main.Major + 1, 0, 0) }
+        else { [version]::new($main.Major, $main.Minor + 1, 0) }
+    }
     'fix'      { [version]::new($main.Major, $main.Minor, $main.Build + 1) }
     'breaking' { [version]::new($main.Major + 1, 0, 0) }
 }
