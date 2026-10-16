@@ -86,34 +86,18 @@ public static class ModelCatalog
         else if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
     }
 
-    /// <summary>Downloads (and for archives, extracts) a model, reporting 0..1 progress.</summary>
-    public static async Task DownloadAsync(LocalModel model, string modelsDir, IProgress<double>? progress, CancellationToken ct)
+    /// <summary>Downloads (and for archives, unpacks) a model.</summary>
+    public static async Task DownloadAsync(LocalModel model, string modelsDir, IProgress<DownloadProgress>? progress, CancellationToken ct)
     {
         Directory.CreateDirectory(modelsDir);
         var target = PathOf(modelsDir, model.Id);
         var part = target + ".part";
         try
         {
-            using var response = await Http.Client.GetAsync(model.Url, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
-            var total = response.Content.Headers.ContentLength ?? model.SizeBytes;
-            await using (var source = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false))
-            await using (var destination = new FileStream(part, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
-            {
-                var buffer = new byte[81920];
-                long done = 0;
-                int read;
-                while ((read = await source.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
-                {
-                    await destination.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
-                    done += read;
-                    // Archives still have to be unpacked, so downloading is only 95% of the work.
-                    if (total > 0) progress?.Report(Math.Min(1.0, (double)done / total) * (model.IsArchive ? 0.95 : 1.0));
-                }
-            }
-
+            await FileDownloader.DownloadAsync(model.Url, part, progress, ct, model.SizeBytes).ConfigureAwait(false);
             if (model.IsArchive)
             {
+                progress?.Report(new DownloadProgress(DownloadPhase.Unpacking, 1, 0));
                 await Task.Run(() => Archives.ExtractTarBz2(part, target), ct).ConfigureAwait(false);
                 File.Delete(part);
             }
@@ -121,8 +105,6 @@ public static class ModelCatalog
             {
                 File.Move(part, target, overwrite: true);
             }
-
-            progress?.Report(1.0);
         }
         catch
         {

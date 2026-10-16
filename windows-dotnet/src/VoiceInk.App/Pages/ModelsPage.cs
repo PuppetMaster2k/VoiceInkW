@@ -55,6 +55,10 @@ internal static class ModelsPage
         var title = model.Id == active ? $"{model.Title}  ·  in use" : model.Title;
         var actions = Fluent.Horizontal(8);
         var progress = new ProgressBar { Width = 140, Minimum = 0, Maximum = 1, Visibility = Visibility.Collapsed, VerticalAlignment = VerticalAlignment.Center };
+        var status = Fluent.Caption("");
+        status.VerticalAlignment = VerticalAlignment.Center;
+        status.MinWidth = 90;
+        actions.Children.Add(status);
         actions.Children.Add(progress);
 
         if (installed)
@@ -77,7 +81,7 @@ internal static class ModelsPage
             {
                 download!.IsEnabled = false;
                 progress.Visibility = Visibility.Visible;
-                _ = DownloadAsync(s, model, dir, progress, refresh);
+                _ = DownloadAsync(s, model, dir, progress, status, refresh);
             }, glyph: "\uE896");
             actions.Children.Add(download);
         }
@@ -85,19 +89,30 @@ internal static class ModelsPage
         return Fluent.Row(title, description, actions);
     }
 
-    private static async Task DownloadAsync(AppServices s, LocalModel model, string dir, ProgressBar bar, Action refresh)
+    private static async Task DownloadAsync(AppServices s, LocalModel model, string dir, ProgressBar bar, TextBlock status, Action refresh)
     {
-        var progress = new Progress<double>(v => bar.Value = v);
+        // Created on the UI thread, so reports (a few per second) update the controls directly.
+        var progress = new Progress<DownloadProgress>(p =>
+        {
+            if (p.Phase == DownloadPhase.Unpacking)
+            {
+                bar.IsIndeterminate = true;
+                status.Text = "Unpacking…";
+                return;
+            }
+
+            bar.Value = p.Fraction;
+            status.Text = $"{p.Fraction:P0}  ·  {p.BytesPerSecond / 1024 / 1024:F1} MB/s";
+        });
         try
         {
             await ModelCatalog.DownloadAsync(model, dir, progress, CancellationToken.None);
-            refresh();
         }
         catch (Exception e) when (e is HttpRequestException or IOException or UnauthorizedAccessException or InvalidDataException)
         {
-            bar.Visibility = Visibility.Collapsed;
             s.Tray.Notify("Download failed", e.Message, VoiceInk.Core.Dictation.NoticeKind.Error);
-            refresh();
         }
+
+        refresh();
     }
 }
