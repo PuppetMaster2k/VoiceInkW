@@ -77,6 +77,10 @@ On Windows, install the .NET 10 SDK and Visual Studio 2022 Desktop development w
 ./scripts/package-nativeaot.ps1
 ```
 
+### Versioning
+
+`<Version>` in `src/VoiceInk.App/VoiceInk.App.csproj` is the plain release version (`MAJOR.MINOR.PATCH`). On every feature or fix branch run `./scripts/bump-version.ps1 -Kind feature|fix|breaking` once; it bumps relative to `origin/main`, so repeating it is safe. Packages built on `main` use the version as is (`v0.2.0`, `VoiceInk-x64-0.2.0.zip`); packages built on any other branch get an `-rc` suffix (`v0.2.0-rc`, `VoiceInk-x64-0.2.0-rc.zip`).
+
 The script publishes with `Properties/PublishProfiles/NativeAOT.pubxml`, creates a ZIP in `artifacts/`, copies it to `../release/windows/` (creating the folder if needed), and prints its SHA-256 hash. Extract the entire archive and run `VoiceInk.exe`; keep the Windows App SDK and Whisper native libraries alongside the executable. AOT uses a separate `bin/aot` app build directory. The regular publish command remains available.
 
 NativeAOT compilation requires the C++ linker; a successful managed build alone does not produce a NativeAOT executable.
