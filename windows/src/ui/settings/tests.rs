@@ -2,7 +2,7 @@
 //! headlessly with `iced_test`.
 
 use super::*;
-use crate::config::{Config, HotkeyMode};
+use crate::config::{Config, HotkeyMode, TranscriptionProvider};
 use crate::paths::AppPaths;
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
@@ -144,6 +144,33 @@ fn history_clear_needs_confirmation_and_dashboard_copies_entries() {
     assert_eq!(f.window.ctx.history.load().len(), 1, "first click only asks");
     f.send(Message::History(history::Message::ConfirmClear));
     assert_eq!(f.window.ctx.history.load(), vec![]);
+}
+
+#[test]
+fn using_a_local_model_selects_the_provider_and_the_transcription_model() {
+    let mut f = Fixture::new(SettingsPage::LocalModels);
+    f.send(Message::Models(models::Message::Use("ggml-small.bin")));
+    assert_eq!(f.window.config.transcription.provider, TranscriptionProvider::Local);
+    assert_eq!(f.window.config.transcription.model_name(), "ggml-small.bin");
+    assert_eq!(f.send(Message::Save), Outcome::Saved);
+    let saved = f.saved_config();
+    assert_eq!(saved.transcription.provider, TranscriptionProvider::Local);
+    assert_eq!(saved.transcription.model.as_deref(), Some("ggml-small.bin"), "the Transcription page keeps it");
+}
+
+#[test]
+fn downloads_start_once_and_progress_is_tracked() {
+    let mut f = Fixture::new(SettingsPage::LocalModels);
+    let outcome = f.send(Message::Models(models::Message::Download("ggml-tiny.bin")));
+    let Outcome::Download { model, dir } = outcome else { panic!("expected a download, got {outcome:?}") };
+    assert_eq!(model.id, "ggml-tiny.bin");
+    assert_eq!(dir, f.dir.join("models"));
+    assert_eq!(f.send(Message::Models(models::Message::Download("ggml-tiny.bin"))), Outcome::None, "already running");
+
+    f.send(Message::Models(models::Message::Finished("ggml-tiny.bin", Err("offline".into()))));
+    assert!(f.status().is_some_and(|s| s.is_error && s.text.contains("Whisper Tiny") && s.text.contains("offline")));
+    let again = f.send(Message::Models(models::Message::Download("ggml-tiny.bin")));
+    assert!(matches!(again, Outcome::Download { .. }), "a failed download can be retried");
 }
 
 #[test]

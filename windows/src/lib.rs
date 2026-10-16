@@ -9,7 +9,7 @@
 //! * **Use case** — [`pipeline`], which depends on providers only through the
 //!   [`pipeline::Services`] trait.
 //! * **Adapters** — [`transcription`], [`enhancement`], [`credentials`],
-//!   [`history`], [`http`], [`audio`].
+//!   [`history`], [`http`], [`audio`], [`local_models`] and [`download`].
 //! * **UI / OS** — `platform` (Windows only): capture, hooks, tray, windows.
 
 pub mod artwork;
@@ -17,10 +17,12 @@ pub mod audio;
 pub mod config;
 pub mod context;
 pub mod credentials;
+pub mod download;
 pub mod enhancement;
 pub mod history;
 pub mod http;
 pub mod input;
+pub mod local_models;
 pub mod modes;
 pub mod paths;
 pub mod pipeline;

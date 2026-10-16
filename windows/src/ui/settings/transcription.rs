@@ -3,6 +3,7 @@
 use super::super::style::{self, FIELD_WIDTH, Labeled, field, field_with_hint, indented};
 use super::form::{self, Env, KeyChanges, KeyField, KeyMessage, Status};
 use crate::config::{Config, LANGUAGES, TranscriptionProvider};
+use crate::local_models;
 use iced::widget::{checkbox, column, pick_list, row, text_input};
 use iced::{Element, Length};
 
@@ -11,6 +12,8 @@ pub struct Transcription {
     model: String,
     key: KeyField,
     fillers: String,
+    /// Offline models found in the models folder (for the local provider).
+    installed: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -38,10 +41,31 @@ pub fn model_choices(models: &[&'static str], default: &'static str) -> Vec<Stri
 impl Transcription {
     pub fn new(config: &Config, env: Env<'_>) -> Self {
         let settings = &config.transcription;
-        let mut page =
-            Self { model: settings.model_name(), key: KeyField::default(), fillers: config.filler_words.join(", ") };
+        let mut page = Self {
+            model: settings.model_name(),
+            key: KeyField::default(),
+            fillers: config.filler_words.join(", "),
+            installed: Vec::new(),
+        };
         page.key.refresh(settings.provider.credential_key(), env);
+        page.refresh_models(config, env);
         page
+    }
+
+    /// The model, provider or models folder was changed elsewhere.
+    pub fn sync(&mut self, config: &Config, env: Env<'_>) {
+        self.model = config.transcription.model_name();
+        self.key.refresh(config.transcription.provider.credential_key(), env);
+        self.refresh_models(config, env);
+    }
+
+    /// Re-reads which offline models are installed.
+    pub fn refresh_models(&mut self, config: &Config, env: Env<'_>) {
+        self.installed = if config.transcription.provider == TranscriptionProvider::Local {
+            local_models::installed(&super::models::models_dir(config, env))
+        } else {
+            Vec::new()
+        };
     }
 
     pub fn update(&mut self, message: Message, config: &mut Config, env: Env<'_>) -> Option<Status> {
@@ -51,6 +75,7 @@ impl Transcription {
                 settings.set_provider(p.value);
                 self.model = p.value.default_model().to_string();
                 self.key.refresh(p.value.credential_key(), env);
+                self.refresh_models(config, env);
             }
             Message::Model(model) => self.model = model,
             Message::Language(language) => settings.language = language.value.to_string(),
@@ -76,6 +101,16 @@ impl Transcription {
         self.key.saved(config.transcription.provider.credential_key(), env);
     }
 
+    /// Suggestions for the model field: the installed offline models for the
+    /// local provider, otherwise the provider's known models.
+    fn model_choices(&self, provider: TranscriptionProvider) -> Vec<String> {
+        if provider == TranscriptionProvider::Local {
+            self.installed.clone()
+        } else {
+            model_choices(provider.models(), provider.default_model())
+        }
+    }
+
     pub fn view<'a>(&'a self, config: &'a Config) -> Element<'a, Message> {
         let settings = &config.transcription;
         let provider = settings.provider;
@@ -94,12 +129,7 @@ impl Transcription {
                     text_input(provider.default_model(), &self.model)
                         .on_input(Message::Model)
                         .width(Length::Fixed(FIELD_WIDTH)),
-                    pick_list(
-                        model_choices(provider.models(), provider.default_model()),
-                        None::<String>,
-                        Message::Model
-                    )
-                    .placeholder("Choose…"),
+                    pick_list(self.model_choices(provider), None::<String>, Message::Model).placeholder("Choose…"),
                 ]
                 .spacing(8),
             ),

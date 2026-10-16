@@ -65,10 +65,22 @@ pub fn summarize_error_body(body: &str) -> String {
 }
 
 pub fn agent(timeout: Duration) -> ureq::Agent {
-    let builder = ureq::AgentBuilder::new()
-        .timeout_connect(CONNECT_TIMEOUT)
-        .timeout(timeout)
-        .user_agent(concat!("VoiceInk-Windows/", env!("CARGO_PKG_VERSION")));
+    build(ureq::AgentBuilder::new().timeout_connect(CONNECT_TIMEOUT).timeout(timeout))
+}
+
+/// An agent for large downloads: no overall deadline, only a silent
+/// connection (no bytes for `stall`) counts as failed.
+pub fn download_agent(stall: Duration) -> ureq::Agent {
+    build(
+        ureq::AgentBuilder::new()
+            .timeout_connect(CONNECT_TIMEOUT)
+            .timeout_read(stall)
+            .max_idle_connections_per_host(16),
+    )
+}
+
+fn build(builder: ureq::AgentBuilder) -> ureq::Agent {
+    let builder = builder.user_agent(concat!("VoiceInk-Windows/", env!("CARGO_PKG_VERSION")));
     #[cfg(windows)]
     let builder = match native_tls::TlsConnector::new() {
         Ok(tls) => builder.tls_connector(std::sync::Arc::new(tls)),

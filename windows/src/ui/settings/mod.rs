@@ -12,6 +12,7 @@ mod enhancement;
 mod form;
 mod general;
 mod history;
+mod models;
 mod output;
 mod prompts;
 mod snippets;
@@ -21,12 +22,14 @@ mod transcription;
 
 use super::Desktop;
 use super::style::{self, NAV_WIDTH, PAGE_PADDING};
-use crate::config::{Config, ConfigError};
+use crate::config::{Config, ConfigError, TranscriptionProvider};
 use crate::context::AppContext;
+use crate::local_models::{self, LocalModel};
 use crate::settings_page::SettingsPage;
 use form::{Env, KeyChanges, Status};
 use iced::widget::{Column, button, column, container, row, scrollable, space, text};
-use iced::{Element, Fill, Length};
+use iced::{Element, Fill, Length, Task};
+use std::path::PathBuf;
 use std::rc::Rc;
 
 #[derive(Debug, Clone)]
@@ -37,6 +40,7 @@ pub enum Message {
     Dashboard(dashboard::Message),
     General(general::Message),
     Transcription(transcription::Message),
+    Models(models::Message),
     Enhancement(enhancement::Message),
     Prompts(prompts::Message),
     Dictionary(dictionary::Message),
@@ -47,9 +51,14 @@ pub enum Message {
 }
 
 /// What the surrounding daemon has to do after an update.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Outcome {
     None,
+    /// A model download should start; run [`SettingsWindow::download`] and feed its messages back.
+    Download {
+        model: &'static LocalModel,
+        dir: PathBuf,
+    },
     /// Settings and keys were written; the app should reload them.
     Saved,
     Close,
@@ -65,6 +74,7 @@ pub struct SettingsWindow {
     dashboard: dashboard::Dashboard,
     general: general::General,
     transcription: transcription::Transcription,
+    models: models::Models,
     enhancement: enhancement::Enhancement,
     prompts: prompts::Prompts,
     dictionary: dictionary::Dictionary,
@@ -85,6 +95,7 @@ impl SettingsWindow {
         let mut window = Self {
             general: general::General::new(&config, env),
             transcription: transcription::Transcription::new(&config, env),
+            models: models::Models::default(),
             enhancement: enhancement::Enhancement::new(&config, env),
             prompts: prompts::Prompts::new(&config),
             dictionary: dictionary::Dictionary::new(&config),
@@ -101,6 +112,11 @@ impl SettingsWindow {
         };
         window.show_page(page);
         Ok(window)
+    }
+
+    /// The task that downloads `model` into `dir`, to run for an [`Outcome::Download`].
+    pub fn download(model: &'static LocalModel, dir: PathBuf) -> Task<Message> {
+        models::download(model, dir).map(Message::Models)
     }
 
     pub fn title() -> &'static str {
@@ -135,6 +151,20 @@ impl SettingsWindow {
             Message::Dashboard(m) => self.dashboard.update(m, env),
             Message::General(m) => self.general.update(m, config, env),
             Message::Transcription(m) => self.transcription.update(m, config, env),
+            Message::Models(m) => match self.models.update(m, config, env) {
+                models::Reaction::None => None,
+                models::Reaction::Download(model, dir) => return Outcome::Download { model, dir },
+                models::Reaction::Use(id) => {
+                    config.transcription.set_provider(TranscriptionProvider::Local);
+                    config.transcription.model = Some(id.to_string());
+                    self.transcription.sync(config, env);
+                    Some(Status::info(format!("{} selected. Click Save to apply.", local_models::title_of(id))))
+                }
+                models::Reaction::InstalledChanged(status) => {
+                    self.transcription.refresh_models(config, env);
+                    status
+                }
+            },
             Message::Enhancement(m) => self.enhancement.update(m, config, env),
             Message::Prompts(m) => self.prompts.update(m, config),
             Message::Dictionary(m) => {
@@ -230,6 +260,10 @@ impl SettingsWindow {
             SettingsPage::Dashboard => self.dashboard.view().map(Message::Dashboard),
             SettingsPage::General => self.general.view(config).map(Message::General),
             SettingsPage::Transcription => self.transcription.view(config).map(Message::Transcription),
+            SettingsPage::LocalModels => {
+                let env = Env { app: &self.ctx, desktop: self.desktop.as_ref() };
+                self.models.view(config, env).map(Message::Models)
+            }
             SettingsPage::Enhancement => self.enhancement.view(config).map(Message::Enhancement),
             SettingsPage::Prompts => self.prompts.view(config).map(Message::Prompts),
             SettingsPage::Dictionary => self.dictionary.view().map(Message::Dictionary),

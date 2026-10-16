@@ -93,6 +93,9 @@ impl Daemon {
                         Task::none()
                     }
                     Outcome::Close => window::close(id),
+                    Outcome::Download { model, dir } => {
+                        SettingsWindow::download(model, dir).map(move |m| Message::Settings(id, m))
+                    }
                 }
             }
             Message::WindowClosed(id) => {
