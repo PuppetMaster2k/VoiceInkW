@@ -17,8 +17,9 @@ name = "voiceink"
 path = "src/lib.rs"
 
 [features]
-default = []
-# Offline transcription with whisper.cpp (needs CMake + a C++ toolchain at build time).
+# Offline transcription is part of every normal build, so the "Local" provider always works.
+# Building it needs CMake and a C++ toolchain; without them, opt out with `--no-default-features`.
+default = ["local-whisper"]
 local-whisper = ["dep:whisper-rs"]
 
 [dev-dependencies]

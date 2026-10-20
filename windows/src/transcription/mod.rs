@@ -132,7 +132,7 @@ fn whisper_engine(path: PathBuf) -> Result<Box<dyn Transcriber>, TranscriptionEr
 #[cfg(not(feature = "local-whisper"))]
 fn whisper_engine(_path: PathBuf) -> Result<Box<dyn Transcriber>, TranscriptionError> {
     Err(TranscriptionError::NotConfigured(
-        "this build has no Whisper engine; rebuild with `--features local-whisper` or use the custom provider with a local whisper.cpp server".into(),
+        "this build was made without the `local-whisper` feature; rebuild with default features or use the custom provider with a local whisper.cpp server".into(),
     ))
 }
 
