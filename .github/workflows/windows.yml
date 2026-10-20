@@ -38,3 +38,11 @@ jobs:
         with:
           name: voiceink-windows
           path: windows/target/release/voiceink.exe
+      - name: Tag and release
+          if: steps.plan.outputs.release == 'true'
+          env:
+            GH_TOKEN: ${{ github.token }}
+          run: |
+            $tag = 'v${{ steps.plan.outputs.version }}'
+            $assets = Get-ChildItem "../release/windows/$tag" -File | ForEach-Object FullName
+            gh release create $tag @assets --target '${{ github.sha }}' --title $tag --generate-notes
