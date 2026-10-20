@@ -13,7 +13,7 @@ cursor is. It runs from the notification area, like the macOS menu-bar app.
 | Global shortcut: toggle, push-to-talk, hybrid, modifier-only keys (Right ⌘) | `WH_KEYBOARD_LL` / `WH_MOUSE_LL` hooks: `RightCtrl`, `F9`, `Ctrl+Shift+Space`, `Mouse4`, … |
 | CoreAudio recorder (16 kHz mono) | WASAPI shared-mode capture; any mix format is downmixed and resampled to 16 kHz |
 | Cloud transcription | OpenAI (default, `gpt-4o-transcribe`), Groq, Deepgram (Nova-3, keyterms), ElevenLabs Scribe, Mistral Voxtral, any OpenAI-compatible endpoint (e.g. a local `whisper.cpp` server) |
-| Local whisper.cpp | Optional `local-whisper` build feature (`whisper-rs`), with an in-app model downloader (**Local Models** page: parallel ranged downloads with speed display) |
+| Local whisper.cpp | Built in by default (`local-whisper` feature, `whisper-rs`), with an in-app model downloader (**Local Models** page: parallel ranged downloads with speed display) |
 | Output filter (`[MUSIC]`, `(laughs)`, tag blocks, filler words) | Ported 1:1 (`text::filter`) |
 | Paragraph formatter, word counter | Ported (`text::formatter`, `text::words`) |
 | Dictionary: word replacements, custom vocabulary | Ported with the same boundary rules, including CJK/Thai |
@@ -67,10 +67,12 @@ The settings UI also runs on Linux/macOS for development:
 `libxkbcommon-x11`). To render every page to PNG without a display, run
 `VOICEINK_SCREENSHOTS=/tmp/shots cargo test render_screenshots -- --ignored`.
 
-Offline transcription with whisper.cpp needs CMake and a C++ compiler:
+Offline transcription with whisper.cpp is part of every normal build, so the
+**Local** provider always works. Building it needs CMake and a C++ compiler
+(Visual Studio Build Tools on Windows). Without them, build without it:
 
 ```powershell
-cargo build --release --features local-whisper
+cargo build --release --no-default-features
 ```
 
 Open **Local Models** in the settings window to download a model (Whisper

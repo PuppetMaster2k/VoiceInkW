@@ -5,6 +5,7 @@
 //! between dictations because loading a model takes far longer than decoding.
 
 use super::{Transcriber, TranscriptionError, TranscriptionRequest, non_empty};
+use std::num::NonZero;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
@@ -58,8 +59,8 @@ fn run(model_path: &Path, samples: &[f32], language: Option<&str>, vocabulary: &
     let mut state = ctx.create_state().map_err(|e| e.to_string())?;
 
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-    let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).min(MAX_THREADS);
-    params.set_n_threads(threads as i32);
+    let threads = std::thread::available_parallelism().map_or(4, NonZero::get).min(MAX_THREADS);
+    params.set_n_threads(i32::try_from(threads).unwrap_or(4));
     params.set_language(Some(language.unwrap_or("auto")));
     params.set_translate(false);
     params.set_no_context(true);

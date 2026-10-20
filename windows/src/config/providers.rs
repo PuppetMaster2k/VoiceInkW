@@ -16,7 +16,7 @@ pub enum TranscriptionProvider {
     /// Any OpenAI-compatible `/audio/transcriptions` endpoint (e.g. a local
     /// `whisper.cpp` server, `LocalAI`, faster-whisper-server).
     Custom,
-    /// Offline whisper.cpp (requires the `local-whisper` build feature).
+    /// Offline whisper.cpp (the `local-whisper` feature, on by default).
     Local,
 }
 
