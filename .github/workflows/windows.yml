@@ -18,6 +18,8 @@ defaults:
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: write # create the tag and release
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -38,11 +40,32 @@ jobs:
         with:
           name: voiceink-windows
           path: windows/target/release/voiceink.exe
+      # Only a push to main releases, and only when Cargo.toml has a version that is not tagged yet.
+      - name: Plan release
+        id: plan
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
+          $tagged = git ls-remote --tags origin "refs/tags/v$version"
+          $release = ($env:GITHUB_EVENT_NAME -eq 'push') -and ($env:GITHUB_REF -eq 'refs/heads/main') -and (-not $tagged)
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "release=$($release.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          Write-Host "version $version, release: $release"
+      - name: Package
+        if: steps.plan.outputs.release == 'true'
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.plan.outputs.version }}
+        run: |
+          $name = "VoiceInk-$env:VERSION-win-x64"
+          New-Item -ItemType Directory -Force "dist/$name" | Out-Null
+          Copy-Item target/release/voiceink.exe, README.md, ../LICENSE "dist/$name"
+          Compress-Archive -Path "dist/$name/*" -DestinationPath "dist/$name.zip"
       - name: Tag and release
-          if: steps.plan.outputs.release == 'true'
-          env:
-            GH_TOKEN: ${{ github.token }}
-          run: |
-            $tag = 'v${{ steps.plan.outputs.version }}'
-            $assets = Get-ChildItem "../release/windows/$tag" -File | ForEach-Object FullName
-            gh release create $tag @assets --target '${{ github.sha }}' --title $tag --generate-notes
+        if: steps.plan.outputs.release == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.plan.outputs.version }}
+        run: |
+          gh release create "v$env:VERSION" "dist/VoiceInk-$env:VERSION-win-x64.zip" --target $env:GITHUB_SHA --title "v$env:VERSION" --generate-notes
