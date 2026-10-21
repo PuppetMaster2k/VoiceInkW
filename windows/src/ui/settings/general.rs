@@ -1,10 +1,11 @@
 //! Shortcuts, microphone, overlay, sounds and autostart.
 
 use super::super::style::{self, FIELD_WIDTH, Labeled, field, field_with_hint, indented, selected};
+use super::capture::{self, Capture, Step};
 use super::form::{self, Env, KeyChanges, Status};
 use crate::config::{Config, HotkeyMode, OverlayPosition};
 use iced::widget::{button, checkbox, column, pick_list, row, text, text_input};
-use iced::{Element, Length};
+use iced::{Element, Event, Length, Subscription, event, keyboard, mouse};
 
 const HOTKEY_MODES: [Labeled<HotkeyMode>; 3] = [
     Labeled::new(HotkeyMode::Hybrid, "Tap to toggle, hold to talk"),
@@ -28,6 +29,8 @@ pub struct General {
     paste_last: String,
     /// "System default" followed by the microphones (and an unplugged configured one).
     microphones: Vec<String>,
+    /// Set while the next key press is being read into the record field.
+    capture: Option<Capture>,
 }
 
 #[derive(Debug, Clone)]
@@ -43,6 +46,10 @@ pub enum Message {
     Mute(bool),
     Autostart(bool),
     EditModes,
+    /// Start or stop reading the record shortcut from the keyboard or mouse.
+    ToggleCapture,
+    Key(keyboard::Event),
+    Mouse(mouse::Button),
 }
 
 impl General {
@@ -60,6 +67,7 @@ impl General {
             cancel: hotkeys.cancel.clone(),
             paste_last: hotkeys.paste_last.clone().unwrap_or_default(),
             microphones,
+            capture: None,
         }
     }
 
@@ -78,8 +86,42 @@ impl General {
             Message::Mute(on) => config.audio.mute_system_audio = on,
             Message::Autostart(on) => config.start_with_windows = on,
             Message::EditModes => env.desktop.open_path(&env.app.paths.config()),
+            Message::ToggleCapture => self.capture = self.capture.is_none().then(Capture::default),
+            Message::Key(event) => {
+                if let Some(step) = self.capture.as_mut().map(|c| c.key(&event)) {
+                    self.finish_capture(step);
+                }
+            }
+            Message::Mouse(button) => {
+                if let Some(name) = self.capture.as_ref().and_then(|_| capture::mouse_name(button)) {
+                    self.finish_capture(Step::Done(name.to_string()));
+                }
+            }
         }
         None
+    }
+
+    fn finish_capture(&mut self, step: Step) {
+        match step {
+            Step::Wait => {}
+            Step::Cancel => self.capture = None,
+            Step::Done(spec) => {
+                self.record = spec;
+                self.capture = None;
+            }
+        }
+    }
+
+    /// Key and mouse input, only while a shortcut is being captured.
+    pub fn subscription(&self) -> Subscription<Message> {
+        if self.capture.is_none() {
+            return Subscription::none();
+        }
+        event::listen_with(|event, _, _| match event {
+            Event::Keyboard(event) => Some(Message::Key(event)),
+            Event::Mouse(mouse::Event::ButtonPressed(button)) => Some(Message::Mouse(button)),
+            _ => None,
+        })
     }
 
     pub fn apply(&self, config: &mut Config, _keys: &mut KeyChanges) -> Result<(), String> {
@@ -99,8 +141,16 @@ impl General {
         column![
             field_with_hint(
                 "Record shortcut",
-                text_input("RightCtrl", &self.record).on_input(Message::Record).width(200),
-                "Examples: RightCtrl, F9, Ctrl+Shift+Space, Alt+Q, Mouse4",
+                row![
+                    text_input("RightCtrl", &self.record).on_input(Message::Record).width(200),
+                    button(if self.capture.is_some() { "Press a key… (Esc cancels)" } else { "Press to set" })
+                        .on_press(Message::ToggleCapture)
+                        .style(button::secondary),
+                ]
+                .spacing(8)
+                .align_y(iced::Center),
+                "Type it, or click \"Press to set\" and press the key, combination or mouse button. \
+                 Examples: RightCtrl, F9, Ctrl+Shift+Space, Mouse4",
             ),
             field(
                 "Shortcut behaviour",
