@@ -1,20 +1,17 @@
-# ⚠️ This Project Does Not Accept Pull Requests
+## Summary
+What does this change and why?
 
-Thank you for your interest in contributing to VoiceInk!
+## Related issues
+Closes #
 
-However, **this project is not currently accepting pull requests.**
+## Validation
+- [ ] `cargo fmt`
+- [ ] `cargo clippy --all-targets -- -D warnings`
+- [ ] `cargo test`
+- [ ] Manually checked what the change touches (microphone capture, shortcuts, clipboard restoration, UI)
 
-## Please close this PR
+## Screenshots
+For UI changes.
 
-## Alternative ways to contribute:
-
-- 🐛 **Report bugs**: Open an [issue](../../issues) with detailed information
-- 💡 **Suggest features**: Share your ideas via [issues](../../issues) or [discussions](../../discussions)
-- 🍴 **Fork the project**: You're welcome to create and maintain your own fork
-- 📖 **Improve documentation**: Suggest corrections or clarifications via issues
-
-Thank you for understanding, and I appreciate your interest in VoiceInk!
-
----
-
-For more information, see [CONTRIBUTING.md](../CONTRIBUTING.md)
+## Notes
+Anything reviewers should know: follow-ups, risks, config or version changes.

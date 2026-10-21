@@ -5,6 +5,7 @@
 //! are kept by their page and validated in its `apply` step when the user
 //! clicks **Save**, which then writes `config.json` and the typed API keys.
 
+mod capture;
 mod command;
 mod dashboard;
 mod dictionary;
@@ -28,7 +29,7 @@ use crate::local_models::{self, LocalModel};
 use crate::settings_page::SettingsPage;
 use form::{Env, KeyChanges, Status};
 use iced::widget::{Column, button, column, container, row, scrollable, space, text};
-use iced::{Element, Fill, Length, Task};
+use iced::{Element, Fill, Length, Subscription, Task};
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -117,6 +118,15 @@ impl SettingsWindow {
     /// The task that downloads `model` into `dir`, to run for an [`Outcome::Download`].
     pub fn download(model: &'static LocalModel, dir: PathBuf) -> Task<Message> {
         models::download(model, dir).map(Message::Models)
+    }
+
+    /// Input the window wants while it is open (shortcut capture).
+    pub fn subscription(&self) -> Subscription<Message> {
+        if self.page == SettingsPage::General {
+            self.general.subscription().map(Message::General)
+        } else {
+            Subscription::none()
+        }
     }
 
     pub fn title() -> &'static str {

@@ -52,6 +52,8 @@ pub enum Message {
     Connected(UiHandle),
     Request(UiRequest),
     Settings(window::Id, settings::Message),
+    /// Window-less input for the open settings window.
+    SettingsInput(settings::Message),
     WindowClosed(window::Id),
 }
 
@@ -98,6 +100,10 @@ impl Daemon {
                     }
                 }
             }
+            Message::SettingsInput(message) => match self.settings.as_ref().map(|(id, _)| *id) {
+                Some(id) => self.update(Message::Settings(id, message)),
+                None => Task::none(),
+            },
             Message::WindowClosed(id) => {
                 if self.settings.as_ref().is_some_and(|(open, _)| *open == id) {
                     self.settings = None;
@@ -151,8 +157,12 @@ fn requests() -> impl iced::futures::Stream<Item = Message> {
     })
 }
 
-fn subscription(_: &Daemon) -> Subscription<Message> {
-    Subscription::batch([window::close_events().map(Message::WindowClosed), Subscription::run(requests)])
+fn subscription(daemon: &Daemon) -> Subscription<Message> {
+    let input = daemon
+        .settings
+        .as_ref()
+        .map_or_else(Subscription::none, |(_, window)| window.subscription().map(Message::SettingsInput));
+    Subscription::batch([window::close_events().map(Message::WindowClosed), Subscription::run(requests), input])
 }
 
 /// How [`run`] starts.
