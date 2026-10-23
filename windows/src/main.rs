@@ -31,6 +31,18 @@ fn init_logging(ctx: &AppContext) {
             WriteLogger::new(LevelFilter::Warn, libraries_config, libraries),
         ]);
     }
+    log_panics();
+}
+
+/// Release builds have no console, so a panic would vanish without a trace:
+/// write it to the log as well.
+fn log_panics() {
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let thread = std::thread::current();
+        log::error!("panic on thread '{}': {info}", thread.name().unwrap_or("unnamed"));
+        default_hook(info);
+    }));
 }
 
 fn main() -> ExitCode {

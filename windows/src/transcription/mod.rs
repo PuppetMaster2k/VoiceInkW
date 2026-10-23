@@ -20,6 +20,7 @@ use crate::credentials::SecretStore;
 use crate::http::HttpError;
 use crate::local_models::{self, LocalEngine};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 const MIN_TIMEOUT: Duration = Duration::from_secs(10);
@@ -49,6 +50,8 @@ pub struct TranscriptionRequest<'a> {
     pub language: Option<&'a str>,
     /// Names and terms the provider should spell correctly.
     pub vocabulary: &'a [String],
+    /// Set when the user cancels; long-running engines stop early.
+    pub cancel: &'a AtomicBool,
 }
 
 /// A speech-to-text engine.

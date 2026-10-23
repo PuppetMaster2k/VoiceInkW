@@ -63,12 +63,15 @@ impl Transcriber for Deepgram {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::AtomicBool;
 
     #[test]
     fn builds_query_with_language_and_keyterms() {
         let dg = Deepgram::new("k".into(), "nova-3".into(), Duration::from_secs(5));
         let vocabulary = vec!["Voice Ink".to_string(), " ".to_string()];
-        let request = TranscriptionRequest { wav: &[], samples: &[], language: None, vocabulary: &vocabulary };
+        let cancel = AtomicBool::new(false);
+        let request =
+            TranscriptionRequest { wav: &[], samples: &[], language: None, vocabulary: &vocabulary, cancel: &cancel };
         let url = dg.url(&request);
         assert!(url.contains("model=nova-3"));
         assert!(url.contains("language=multi"));

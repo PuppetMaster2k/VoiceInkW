@@ -70,6 +70,15 @@ pub struct PipelineOutput {
     pub error: Option<String>,
 }
 
+impl PipelineOutput {
+    /// A run that ended in `message` before producing anything.
+    pub fn failed(message: String) -> Self {
+        let mut entry = Entry::new(Status::Failed);
+        entry.text = format!("Failed: {message}");
+        Self { entry, delivery: None, warning: None, error: Some(message) }
+    }
+}
+
 /// Everything the pipeline needs from the outside world.
 pub trait Services: Send + Sync {
     /// # Errors
@@ -189,6 +198,7 @@ impl<'a> Pipeline<'a> {
                 samples: &input.samples,
                 language,
                 vocabulary: &self.config.vocabulary,
+                cancel: self.cancel,
             })
         });
         entry.transcription_secs = started.elapsed().as_secs_f64();
