@@ -44,8 +44,8 @@ jobs:
       - name: Test
         run: cargo test --locked
       # Every push to main that changes the app is released. The version is the
-      # latest vX.Y.Z tag bumped by the pull request label (or a commit message
-      # marker): release:major, release:minor, otherwise patch; release:skip
+      # latest vX.Y.Z tag bumped by the pull request label (or a "Release: ..."
+      # commit trailer): release:major, release:minor, otherwise patch; release:skip
       # builds without releasing. See windows/CONTRIBUTING-windows.md.
       - name: Plan release
         id: plan
@@ -66,7 +66,9 @@ jobs:
                   messages=$(git log -1 --format=%B)
               fi
           fi
-          marked() { [[ " $labels " == *" release:$1 "* || $messages == *"[release:$1]"* ]]; }
+          # A commit only asks for a bump with a trailer line of its own ("Release: minor"),
+          # so describing the markers in prose does not trigger them.
+          marked() { [[ " $labels " == *" release:$1 "* ]] || grep -qixE "release: *$1" <<< "$messages"; }
           if marked skip; then bump=skip
           elif marked major; then bump=major
           elif marked minor; then bump=minor

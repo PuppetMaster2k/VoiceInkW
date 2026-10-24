@@ -91,8 +91,9 @@ bumped by a label on the merged pull request:
 | Big milestone | `release:major` | `v0.3.0` → `v1.0.0` |
 | No release (docs, CI) | `release:skip` | — |
 
-For direct pushes, put `[release:minor]`, `[release:major]` or
-`[release:skip]` in a commit message instead. The tag is the source of truth:
+For direct pushes, end a commit message with a trailer line of its own
+instead: `Release: minor`, `Release: major` or `Release: skip`. Mentioning
+the words elsewhere in a message has no effect. The tag is the source of truth:
 CI stamps the version into `Cargo.toml` for the build, so it need not be
 edited by hand. Setting it above the latest tag still picks that exact
 version. The labels are created by the first release run.
