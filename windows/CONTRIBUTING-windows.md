@@ -76,3 +76,23 @@ The lint policy lives in `Cargo.toml` (`[lints]`): `clippy::pedantic`,
   ranges.
 - **Tests** sit next to the code (`#[cfg(test)] mod tests`) and cover
   behaviour, not implementation details.
+
+## Releases
+
+Every push to `main` that changes `windows/` is released automatically by
+`.github/workflows/windows.yml` as a `vMAJOR.MINOR.PATCH` tag with a GitHub
+release and `VoiceInk-<version>-win-x64.zip`. The version is the latest tag
+bumped by a label on the merged pull request:
+
+| Change | Label | Example |
+| --- | --- | --- |
+| Bug fix or small feature | *(none)* | `v0.2.2` → `v0.2.3` |
+| Bigger feature | `release:minor` | `v0.2.3` → `v0.3.0` |
+| Big milestone | `release:major` | `v0.3.0` → `v1.0.0` |
+| No release (docs, CI) | `release:skip` | — |
+
+For direct pushes, put `[release:minor]`, `[release:major]` or
+`[release:skip]` in a commit message instead. The tag is the source of truth:
+CI stamps the version into `Cargo.toml` for the build, so it need not be
+edited by hand. Setting it above the latest tag still picks that exact
+version. The labels are created by the first release run.
