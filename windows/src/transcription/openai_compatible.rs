@@ -77,6 +77,7 @@ impl Transcriber for OpenAiCompatible {
 mod tests {
     use super::*;
     use crate::http::test_server::{Route, serve};
+    use std::sync::atomic::AtomicBool;
 
     #[test]
     fn vocabulary_prompt_is_bounded() {
@@ -99,8 +100,14 @@ mod tests {
             Duration::from_secs(5),
         );
         let vocabulary = vec!["VoiceInk".to_string()];
-        let request =
-            TranscriptionRequest { wav: b"RIFF", samples: &[], language: Some("de"), vocabulary: &vocabulary };
+        let cancel = AtomicBool::new(false);
+        let request = TranscriptionRequest {
+            wav: b"RIFF",
+            samples: &[],
+            language: Some("de"),
+            vocabulary: &vocabulary,
+            cancel: &cancel,
+        };
         assert_eq!(client.transcribe(&request).unwrap(), "hello");
         let seen = server.join().unwrap();
         assert!(seen[0].contains("name=\"model\"\r\n\r\nwhisper-1"));

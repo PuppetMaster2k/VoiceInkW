@@ -236,3 +236,11 @@ fn window_context_format() {
     assert_eq!(dictation::window_context(&fg).unwrap(), "Application: code.exe\nWindow title: main.rs");
     assert!(dictation::window_context(&ForegroundInfo::default()).is_none());
 }
+
+#[test]
+fn failed_output_carries_the_error_and_delivers_nothing() {
+    let out = PipelineOutput::failed("boom".into());
+    assert_eq!(out.entry.status, Status::Failed);
+    assert_eq!(out.error.as_deref(), Some("boom"));
+    assert!(out.delivery.is_none());
+}

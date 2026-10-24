@@ -21,8 +21,10 @@ use crate::config::SettingChange;
 use crate::context::AppContext;
 use crate::input::{Decision, HotkeyEvent, Phase, RecordingPolicy, TriggerKind};
 use crate::modes::{self, ForegroundInfo};
-use crate::pipeline::{Delivery, Pipeline, PipelineInput, Stage};
+use crate::pipeline::{Delivery, Pipeline, PipelineInput, PipelineOutput, Stage};
 use crate::settings_page::SettingsPage;
+use std::any::Any;
+use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver};
@@ -403,12 +405,20 @@ impl App {
         let ctx = self.ctx.clone();
         let events = self.events.clone();
         let spawned = std::thread::Builder::new().name(format!("voiceink-job-{id}")).spawn(move || {
+            let started = Instant::now();
+            let seconds = crate::audio::duration_secs(input.samples.len(), crate::audio::TARGET_SAMPLE_RATE);
+            log::info!("job {id}: {seconds:.1}s of audio, {:?}", config.transcription.provider);
             let on_stage = |stage| events.send(UiEvent::Stage { job: id, stage });
-            let mut output = Pipeline::new(&config, ctx.services.as_ref(), &cancel, &on_stage).run(&input);
+            // The overlay waits for `Finished`, so a panic must still end the job.
+            let run = || Pipeline::new(&config, ctx.services.as_ref(), &cancel, &on_stage).run(&input);
+            let mut output = std::panic::catch_unwind(AssertUnwindSafe(run)).unwrap_or_else(|panic| {
+                PipelineOutput::failed(format!("internal error: {}", panic_message(panic.as_ref())))
+            });
             if cancel.load(Ordering::SeqCst) {
                 output.entry.status = crate::history::Status::Canceled;
                 output.delivery = None;
             }
+            log::info!("job {id}: {:?} after {:.1}s", output.entry.status, started.elapsed().as_secs_f64());
             if let Err(e) = ctx.history.record(&config.history, output.entry.clone(), &input.samples) {
                 log::warn!("history write failed: {e}");
             }
@@ -443,7 +453,7 @@ impl App {
         }
     }
 
-    fn on_finished(&mut self, id: JobId, output: crate::pipeline::PipelineOutput) {
+    fn on_finished(&mut self, id: JobId, output: PipelineOutput) {
         self.ui.history_changed();
         // A canceled (or superseded) job's result is dropped.
         if !self.current_job(id) {
@@ -563,4 +573,13 @@ fn copy_selection_in_background() -> Receiver<Option<String>> {
         let _ = tx.send(paste::copy_selection());
     });
     rx
+}
+
+/// The text of a panic payload (`panic!` passes a `&str` or a `String`).
+fn panic_message(payload: &(dyn Any + Send)) -> &str {
+    payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("unknown panic")
 }
