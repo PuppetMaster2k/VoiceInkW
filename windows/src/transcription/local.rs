@@ -5,12 +5,13 @@
 //! between dictations because loading a model takes far longer than decoding.
 
 use super::{Transcriber, TranscriptionError, TranscriptionRequest, non_empty};
-use std::ffi::c_void;
+use std::ffi::{c_int, c_void};
 use std::num::NonZero;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
+use whisper_rs::whisper_rs_sys::{whisper_context, whisper_state};
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
 /// Loaded model, kept across dictations (shared by all `LocalWhisper` instances).
@@ -53,6 +54,18 @@ unsafe extern "C" fn canceled(flag: *mut c_void) -> bool {
     unsafe { (*flag.cast::<AtomicBool>()).load(Ordering::SeqCst) }
 }
 
+/// whisper.cpp calls this before encoding each 30-second window; `false` stops it.
+unsafe extern "C" fn encoding(_: *mut whisper_context, _: *mut whisper_state, flag: *mut c_void) -> bool {
+    log::info!("encoding audio");
+    // SAFETY: as for `canceled`, `flag` is the request's `AtomicBool`.
+    !unsafe { canceled(flag) }
+}
+
+/// whisper.cpp calls this whenever it has decoded new text.
+unsafe extern "C" fn decoded(_: *mut whisper_context, _: *mut whisper_state, segments: c_int, _: *mut c_void) {
+    log::info!("decoded {segments} segment(s)");
+}
+
 fn run(model_path: &Path, request: &TranscriptionRequest<'_>) -> Result<String, String> {
     if !model_path.exists() {
         return Err(format!("model not found: {} (download a ggml model into this folder)", model_path.display()));
@@ -65,6 +78,7 @@ fn run(model_path: &Path, request: &TranscriptionRequest<'_>) -> Result<String, 
         let ctx = WhisperContext::new_with_params(model_path, WhisperContextParameters::default())
             .map_err(|e| format!("failed to load {}: {e}", model_path.display()))?;
         log::info!("loaded {} in {:.1}s", model_path.display(), started.elapsed().as_secs_f64());
+        log::info!("whisper.cpp: {}", whisper_rs::print_system_info().trim());
         *guard = Some((model_path.to_path_buf(), ctx));
     }
     let (_, ctx) = guard.as_ref().expect("context loaded above");
@@ -81,15 +95,22 @@ fn run(model_path: &Path, request: &TranscriptionRequest<'_>) -> Result<String, 
     params.set_print_progress(false);
     params.set_print_realtime(false);
     params.set_print_timestamps(false);
+    // Dictation needs only the text; timestamp tokens just slow decoding down.
+    params.set_no_timestamps(true);
     let prompt = request.vocabulary.iter().map(|w| w.trim()).filter(|w| !w.is_empty()).collect::<Vec<_>>().join(", ");
     if !prompt.is_empty() {
         params.set_initial_prompt(&prompt);
     }
 
-    // SAFETY: the flag is borrowed for the whole of `run`, so it outlives `full`.
+    let flag: *mut c_void = std::ptr::from_ref(request.cancel).cast_mut().cast();
+    // SAFETY: the flag is borrowed for the whole of `run`, so it outlives `full`;
+    // the callbacks only read it.
     unsafe {
         params.set_abort_callback(Some(canceled));
-        params.set_abort_callback_user_data(std::ptr::from_ref(request.cancel).cast_mut().cast());
+        params.set_abort_callback_user_data(flag);
+        params.set_start_encoder_callback(Some(encoding));
+        params.set_start_encoder_callback_user_data(flag);
+        params.set_new_segment_callback(Some(decoded));
     }
 
     let started = Instant::now();

@@ -15,6 +15,11 @@ defaults:
   run:
     working-directory: windows
 
+env:
+  # whisper.cpp would otherwise tune itself to the CPU of whichever runner
+  # builds it (sometimes AVX-512); target AVX2 so the release runs everywhere.
+  GGML_NATIVE: "OFF"
+
 # Releases are numbered from the previous tag, so two runs on main must not overlap.
 concurrency:
   group: windows-${{ github.ref }}
@@ -37,6 +42,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: windows
+          # whisper.cpp's build does not track GGML_* changes; bump to rebuild it.
+          key: ggml-avx2
       - name: Format
         run: cargo fmt --check
       - name: Clippy

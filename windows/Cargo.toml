@@ -45,7 +45,7 @@ base64 = "0.22"
 iced = { version = "0.14", default-features = false, features = [
     "wgpu", "tiny-skia", "crisp", "thread-pool", "fira-sans", "x11",
 ] }
-whisper-rs = { version = "0.16", optional = true }
+whisper-rs = { version = "0.16", optional = true, features = ["raw-api"] }
 
 [target.'cfg(windows)'.dependencies]
 ureq = { version = "2.12", default-features = false, features = ["json", "gzip", "native-tls"] }
