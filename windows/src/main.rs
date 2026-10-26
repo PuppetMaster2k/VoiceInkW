@@ -12,8 +12,16 @@ use voiceink::settings_page::SettingsPage;
 /// The log restarts once it grows beyond this size.
 const MAX_LOG_BYTES: u64 = 2 * 1024 * 1024;
 
+/// Level for the app's own messages: `VOICEINK_LOG=error|warn|info|debug|trace`,
+/// defaulting to `debug` in debug builds and `info` in release builds.
+fn log_level() -> simplelog::LevelFilter {
+    use simplelog::LevelFilter;
+    let default = if cfg!(debug_assertions) { LevelFilter::Debug } else { LevelFilter::Info };
+    std::env::var("VOICEINK_LOG").ok().and_then(|v| v.trim().parse().ok()).unwrap_or(default)
+}
+
 fn init_logging(ctx: &AppContext) {
-    use simplelog::{CombinedLogger, ConfigBuilder, LevelFilter, WriteLogger};
+    use simplelog::{CombinedLogger, ConfigBuilder, LevelFilter, SharedLogger, WriteLogger};
     let path = ctx.paths.log();
     let _ = std::fs::create_dir_all(ctx.paths.root());
     if std::fs::metadata(&path).is_ok_and(|m| m.len() > MAX_LOG_BYTES) {
@@ -22,14 +30,20 @@ fn init_logging(ctx: &AppContext) {
     // Append, so a second instance (which exits immediately) keeps the log.
     let open = || std::fs::OpenOptions::new().create(true).append(true).open(&path);
     if let (Ok(ours), Ok(libraries)) = (open(), open()) {
-        // Our own messages from Info up; only problems from the UI and
+        // Our own messages from `log_level()` up; only problems from the UI and
         // graphics libraries, which are chatty at Info.
         let ours_config = ConfigBuilder::new().set_time_format_rfc3339().add_filter_allow_str("voiceink").build();
         let libraries_config = ConfigBuilder::new().set_time_format_rfc3339().add_filter_ignore_str("voiceink").build();
-        let _ = CombinedLogger::init(vec![
-            WriteLogger::new(LevelFilter::Info, ours_config, ours),
+        let level = log_level();
+        let mut loggers: Vec<Box<dyn SharedLogger>> = vec![
+            WriteLogger::new(level, ours_config.clone(), ours),
             WriteLogger::new(LevelFilter::Warn, libraries_config, libraries),
-        ]);
+        ];
+        // Debug builds also print to the debugger's console / terminal.
+        if cfg!(debug_assertions) {
+            loggers.push(WriteLogger::new(level, ours_config, std::io::stderr()));
+        }
+        let _ = CombinedLogger::init(loggers);
     }
     log_panics();
 }
