@@ -1,0 +1,33 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "cargo build (debug, no local whisper)",
+            "type": "shell",
+            "command": "cargo build --no-default-features",
+            "options": {
+                "cwd": "${workspaceFolder}/windows",
+                "env": {
+                    "PATH": "${env:USERPROFILE}\\.cargo\\bin;C:\\Program Files\\LLVM\\bin;C:\\Program Files\\CMake\\bin;${env:PATH}",
+                    "LIBCLANG_PATH": "C:\\Program Files\\LLVM\\bin"
+                }
+            },
+            "problemMatcher": "$rustc",
+            "group": "build"
+        },
+        {
+            "label": "cargo build (debug, local whisper)",
+            "type": "shell",
+            "command": "cargo build",
+            "options": {
+                "cwd": "${workspaceFolder}/windows",
+                "env": {
+                    "PATH": "${env:USERPROFILE}\\.cargo\\bin;C:\\Program Files\\LLVM\\bin;C:\\Program Files\\CMake\\bin;${env:PATH}",
+                    "LIBCLANG_PATH": "C:\\Program Files\\LLVM\\bin"
+                }
+            },
+            "problemMatcher": "$rustc",
+            "group": "build"
+        }
+    ]
+}
