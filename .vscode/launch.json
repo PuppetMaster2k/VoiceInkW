@@ -1,0 +1,57 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug (cppvsdbg, local whisper)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/windows/target/debug/voiceink.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}/windows",
+            "preLaunchTask": "cargo build (debug, local whisper)",
+            "console": "internalConsole",
+            "environment": [
+                { "name": "PATH", "value": "${env:USERPROFILE}\\.cargo\\bin;${env:PATH}" },
+                { "name": "RUST_BACKTRACE", "value": "1" },
+                { "name": "VOICEINK_LOG", "value": "debug" }
+            ],
+            "symbolSearchPath": "${workspaceFolder}/windows/target/debug"
+        },
+        {
+            "name": "Debug (cppvsdbg, no local whisper)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/windows/target/debug/voiceink.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}/windows",
+            "preLaunchTask": "cargo build (debug, no local whisper)",
+            "console": "internalConsole",
+            "environment": [
+                { "name": "PATH", "value": "${env:USERPROFILE}\\.cargo\\bin;${env:PATH}" },
+                { "name": "RUST_BACKTRACE", "value": "1" },
+                { "name": "VOICEINK_LOG", "value": "debug" }
+            ],
+            "symbolSearchPath": "${workspaceFolder}/windows/target/debug"
+        },
+        {
+            "name": "Debug (CodeLLDB, local whisper)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/windows/target/debug/voiceink.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}/windows",
+            "preLaunchTask": "cargo build (debug, local whisper)",
+            "env": {
+                "PATH": "${env:USERPROFILE}\\.cargo\\bin;${env:PATH}",
+                "RUST_BACKTRACE": "1",
+                "VOICEINK_LOG": "debug"
+            }
+        },
+        {
+            "name": "Attach to running voiceink.exe",
+            "type": "cppvsdbg",
+            "request": "attach",
+            "processId": "${command:pickProcess}"
+        }
+    ]
+}
